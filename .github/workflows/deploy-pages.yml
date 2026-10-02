@@ -28,8 +28,6 @@ jobs:
           rm -rf extracted
           mkdir extracted
           unzip -q kotoba-palette-cleaned.zip -d extracted
-          echo "Extracted files:"
-          find extracted -maxdepth 2 -type f | head -50
 
       - name: Locate project root
         id: project
@@ -39,7 +37,6 @@ jobs:
           PROJECT_ROOT="$(dirname "$(find extracted -maxdepth 3 -name package.json -type f -print -quit)")"
           test -n "$PROJECT_ROOT"
           echo "root=$PROJECT_ROOT" >> "$GITHUB_OUTPUT"
-          echo "Project root: $PROJECT_ROOT"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -64,7 +61,7 @@ jobs:
 
       - name: Test
         working-directory: ${{ steps.project.outputs.root }}
-        run: pnpm test
+        run: pnpm exec vitest run
 
       - name: Build
         working-directory: ${{ steps.project.outputs.root }}
