@@ -1,0 +1,94 @@
+name: Deploy kotoba-palette to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract project archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf extracted
+          mkdir extracted
+          unzip -q kotoba-palette-cleaned.zip -d extracted
+          echo "Extracted files:"
+          find extracted -maxdepth 2 -type f | head -50
+
+      - name: Locate project root
+        id: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT_ROOT="$(dirname "$(find extracted -maxdepth 3 -name package.json -type f -print -quit)")"
+          test -n "$PROJECT_ROOT"
+          echo "root=$PROJECT_ROOT" >> "$GITHUB_OUTPUT"
+          echo "Project root: $PROJECT_ROOT"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ${{ steps.project.outputs.root }}/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: ${{ steps.project.outputs.root }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Check
+        working-directory: ${{ steps.project.outputs.root }}
+        run: pnpm check
+
+      - name: Test
+        working-directory: ${{ steps.project.outputs.root }}
+        run: pnpm test
+
+      - name: Build
+        working-directory: ${{ steps.project.outputs.root }}
+        env:
+          NODE_ENV: production
+          VITE_PUBLIC_BASE: /kotoba-palette/
+          GITHUB_PAGES: "true"
+          CI: "true"
+        run: |
+          pnpm exec vite build
+          cp dist/public/index.html dist/public/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.project.outputs.root }}/dist/public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
